@@ -29,7 +29,7 @@ function scoreLabel(score: number) {
 export default function Home() {
   // Mantém a página pública fechada até a validação final. Para reabrir, defina
   // NEXT_PUBLIC_SITE_PAUSED=false no Vercel e publique novamente.
-  if (process.env.NEXT_PUBLIC_SITE_PAUSED === "true") {
+    if (process.env.NEXT_PUBLIC_SITE_PAUSED === "true" && process.env.NEXT_PUBLIC_FORCE_PAUSE === "true") {
     return (
       <main className="paused-page" id="top">
         <header className="topbar paused-topbar">
