@@ -69,6 +69,8 @@ export async function POST(request: Request) {
     if (!players.includes(voter)) return NextResponse.json({ error: "Participante inválido." }, { status: 400 });
     const access = await sql`SELECT 1 FROM player_access WHERE player_name = ${voter} AND pin = ${pin}`;
     if (!access.length) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
+    const previous = await sql`SELECT 1 FROM ballots WHERE voter_name = ${voter}`;
+    if (previous.length) return NextResponse.json({ error: "Sua resposta já foi enviada e está bloqueada. Peça ao administrador para liberar uma correção." }, { status: 409 });
 
     const clean: Ballot = {};
     for (const [player, scores] of Object.entries(ratings)) {
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
       if (Object.keys(valid).length) clean[player] = valid as Scores;
     }
     if (Object.keys(clean).length < MIN_PLAYERS_RATED) return NextResponse.json({ error: `Avalie pelo menos ${MIN_PLAYERS_RATED} jogadores para enviar.` }, { status: 400 });
-    await sql`INSERT INTO ballots (voter_name, ratings, updated_at) VALUES (${voter}, ${JSON.stringify(clean)}::jsonb, NOW()) ON CONFLICT (voter_name) DO UPDATE SET ratings = EXCLUDED.ratings, updated_at = NOW()`;
+    await sql`INSERT INTO ballots (voter_name, ratings, updated_at) VALUES (${voter}, ${JSON.stringify(clean)}::jsonb, NOW())`;
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Não foi possível registrar a avaliação." }, { status: 500 });
