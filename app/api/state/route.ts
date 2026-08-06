@@ -2,15 +2,58 @@ import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
 
 const SKILLS = new Set(["levantamento", "passe", "ataque", "saque"]);
+const MIN_PLAYERS_RATED = 10;
+
+type Scores = Record<string, number>;
+type Ballot = Record<string, Scores>;
+
+function median(values: number[]) {
+  const ordered = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
+}
+
+// Ajusta o "jeito de dar nota" de cada pessoa. Uma ficha com tudo 5 não eleva ninguém:
+// como ela não diferencia jogadores, cada nota vale o centro neutro (3).
+function normalizedScores(ballot: Ballot) {
+  const values = Object.values(ballot).flatMap((scores) => Object.values(scores));
+  if (!values.length) return [] as { player: string; value: number }[];
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  const deviation = Math.sqrt(variance);
+  return Object.entries(ballot).flatMap(([player, scores]) => Object.values(scores).map((value) => ({
+    player,
+    value: deviation < 0.25 ? 3 : Math.max(1, Math.min(5, 3 + (value - mean) / deviation)),
+  })));
+}
+
+function buildResults(players: string[], ballots: { ratings: Ballot }[]) {
+  const received = new Map(players.map((player) => [player, [] as number[]]));
+  const coverage = new Map(players.map((player) => [player, 0]));
+  for (const row of ballots) {
+    const ballot = row.ratings || {};
+    for (const player of Object.keys(ballot)) coverage.set(player, (coverage.get(player) ?? 0) + 1);
+    for (const rating of normalizedScores(ballot)) received.get(rating.player)?.push(rating.value);
+  }
+  const ranked = players.map((name) => {
+    const values = received.get(name) ?? [];
+    return { name, average: values.length ? median(values) : null, votes: coverage.get(name) ?? 0 };
+  }).sort((a, b) => (b.average ?? -1) - (a.average ?? -1) || a.name.localeCompare(b.name, "pt-BR"));
+  return ranked.map((player, index) => ({ ...player, pot: player.average === null ? null : ["A", "B", "C", "D"][Math.min(3, Math.floor(index / 5))] }));
+}
 
 export async function GET() {
   try {
     const sql = getSql();
-    const [settings, ballots] = await Promise.all([sql`SELECT players FROM app_settings WHERE id = 1`, sql`SELECT voter_name, ratings FROM ballots ORDER BY voter_name`]);
-    return NextResponse.json({ players: settings[0]?.players ?? [], votes: Object.fromEntries(ballots.map((row) => [row.voter_name, row.ratings])) });
-  } catch (error) {
-    console.error("state GET failed", error);
-    return NextResponse.json({ error: "Não foi possível carregar as avaliações." }, { status: 500 });
+    const [settings, ballots] = await Promise.all([
+      sql`SELECT players FROM app_settings WHERE id = 1`,
+      sql`SELECT ratings FROM ballots`,
+    ]);
+    const players: string[] = settings[0]?.players ?? [];
+    // Nunca devolve quem deu qual nota para o navegador público.
+    return NextResponse.json({ players, responses: ballots.length, results: buildResults(players, ballots as { ratings: Ballot }[]) });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível carregar os resultados." }, { status: 500 });
   }
 }
 
@@ -26,25 +69,17 @@ export async function POST(request: Request) {
     if (!players.includes(voter)) return NextResponse.json({ error: "Participante inválido." }, { status: 400 });
     const access = await sql`SELECT 1 FROM player_access WHERE player_name = ${voter} AND pin = ${pin}`;
     if (!access.length) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
-    const clean: Record<string, Record<string, number>> = {};
+
+    const clean: Ballot = {};
     for (const [player, scores] of Object.entries(ratings)) {
       if (!players.includes(player) || player === voter || !scores || typeof scores !== "object") continue;
       const valid = Object.fromEntries(Object.entries(scores).filter(([skill, score]) => SKILLS.has(skill) && Number.isInteger(score) && Number(score) >= 1 && Number(score) <= 5));
-      if (Object.keys(valid).length) clean[player] = valid as Record<string, number>;
+      if (Object.keys(valid).length) clean[player] = valid as Scores;
     }
-    if (!Object.keys(clean).length) return NextResponse.json({ error: "Avalie pelo menos uma pessoa." }, { status: 400 });
+    if (Object.keys(clean).length < MIN_PLAYERS_RATED) return NextResponse.json({ error: `Avalie pelo menos ${MIN_PLAYERS_RATED} jogadores para enviar.` }, { status: 400 });
     await sql`INSERT INTO ballots (voter_name, ratings, updated_at) VALUES (${voter}, ${JSON.stringify(clean)}::jsonb, NOW()) ON CONFLICT (voter_name) DO UPDATE SET ratings = EXCLUDED.ratings, updated_at = NOW()`;
     return NextResponse.json({ ok: true });
-  } catch { return NextResponse.json({ error: "Não foi possível registrar a avaliação." }, { status: 500 }); }
-}
-
-export async function PUT(request: Request) {
-  try {
-    const body = await request.json();
-    const players = Array.isArray(body.players) ? body.players.map((name: unknown) => typeof name === "string" ? name.trim() : "") : [];
-    if (players.length !== 20 || players.some((name: string) => !name) || new Set(players.map((name: string) => name.toLocaleLowerCase())).size !== 20) return NextResponse.json({ error: "Informe 20 nomes diferentes." }, { status: 400 });
-    const sql = getSql();
-    await sql`UPDATE app_settings SET players = ${JSON.stringify(players)}::jsonb, updated_at = NOW() WHERE id = 1`;
-    return NextResponse.json({ ok: true });
-  } catch { return NextResponse.json({ error: "Não foi possível salvar os nomes." }, { status: 500 }); }
+  } catch {
+    return NextResponse.json({ error: "Não foi possível registrar a avaliação." }, { status: 500 });
+  }
 }
