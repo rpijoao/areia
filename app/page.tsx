@@ -30,7 +30,7 @@ export default function Home() {
   // Mantém a página pública fechada até a validação final. Para reabrir, defina
   // NEXT_PUBLIC_SITE_PAUSED=false no Vercel e publique novamente.
   if (process.env.NEXT_PUBLIC_SITE_PAUSED === "true") {
-    return <main><header className="topbar"><a className="brand" href="#top"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a></header><section className="hero" id="top"><div><span className="eyebrow">VÔLEI DE PRAIA</span><h1>Site <em>pausado.</em></h1><p>Estamos preparando uma nova rodada de avaliações mais justa e segura.</p></div></section><footer><span>🏐</span><b>Areia Equilibrada</b></footer></main>;
+    return <main><header className="topbar"><a className="brand" href="#top"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a><a className="primary" href="/admin">Área Admin</a></header><section className="hero" id="top"><div><span className="eyebrow">VÔLEI DE PRAIA</span><h1>Site <em>pausado.</em></h1><p>Estamos preparando uma nova rodada de avaliações mais justa e segura.</p><a className="primary" href="/admin">Entrar como administrador</a></div></section><footer><span>🏐</span><b>Areia Equilibrada</b></footer></main>;
   }
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [votes, setVotes] = useState<VoteMap>({});
