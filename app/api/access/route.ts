@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     }
 
     const sql = getSql();
-    const rows = await sql`SELECT player_name FROM access_codes WHERE pin = ${pin} LIMIT 1`;
+    const rows = await sql`SELECT player_name FROM player_access WHERE pin = ${pin} LIMIT 1`;
     const voter = rows[0]?.player_name;
     if (!voter) {
       return NextResponse.json({ error: "Código inválido. Confira os 6 números recebidos." }, { status: 401 });

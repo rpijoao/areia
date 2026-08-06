@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const [settings, ballots, access] = await Promise.all([
     sql`SELECT players FROM app_settings WHERE id = 1`,
     sql`SELECT voter_name, ratings, updated_at FROM ballots ORDER BY voter_name`,
-    sql`SELECT player_name, pin FROM access_codes ORDER BY player_name`,
+    sql`SELECT player_name, pin FROM player_access ORDER BY player_name`,
   ]);
   return NextResponse.json({ players: settings[0]?.players ?? [], ballots, access });
 }

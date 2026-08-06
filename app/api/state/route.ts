@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const sql = getSql();
     const settings = await sql`SELECT players FROM app_settings WHERE id = 1`;
     const players: string[] = settings[0]?.players ?? [];
-    const access = await sql`SELECT player_name FROM access_codes WHERE pin = ${pin} LIMIT 1`;
+    const access = await sql`SELECT player_name FROM player_access WHERE pin = ${pin} LIMIT 1`;
     const voter = access[0]?.player_name;
     if (!voter || !players.includes(voter)) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
     const previous = await sql`SELECT 1 FROM ballots WHERE voter_name = ${voter}`;
