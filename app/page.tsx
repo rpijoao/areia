@@ -126,16 +126,13 @@ export default function Home() {
   const candidates = players.filter((name) => name !== voter);
   const currentPlayer = candidates[playerIndex];
 
-  function chooseVoter(name: string) {
-    setVoter(name);
-    const saved = typeof window !== "undefined" ? localStorage.getItem(`areia:draft:${name}`) : null;
-    try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
-    setPlayerIndex(0);
-    setEditing(Boolean(votes[name]));
-    setNotice("");
-  }
-
-  function setSkill(skill: Skill, score?: number) {
+              {!voter && <>
+              <label className="select-label pin-label">Seu código individual
+                <input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Digite os 6 números recebidos" onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
+              </label>
+              <button className="primary" disabled={saving} onClick={identifyVoter}>{saving ? "Validando..." : "Continuar com meu código →"}</button>
+              <p className="privacy">O código identifica você automaticamente. Não há lista de nomes nesta tela.</p>
+                        <div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div>{voter && <span className="draft-count">{ratedInDraft}/19 avaliados</span>}</div><b>Digite seu código para começar</b> setSkill(skill: Skill, score?: number) {
     if (!currentPlayer) return;
     setDraft((old) => {
       const rating = { ...(old[currentPlayer] || {}) };
@@ -258,14 +255,26 @@ export default function Home() {
           </aside>
           <div className="panel">
             {!ready && <p className="notice success">Carregando avaliações compartilhadas...</p>}
-            <div className="panel-head"><div><span className="step">PASSO 1</span><h2>Quem está avaliando?</h2></div>{voter && <span className="draft-count">{ratedInDraft}/19 avaliados</span>}</div>
-            <label className="select-label">Escolha seu nome
-              <select value={voter} onChange={(e) => chooseVoter(e.target.value)}><option value="">Selecione na lista...</option>{players.map((name) => <option key={name} value={name}>{name}</option>)}</select>
-            </label>
-            {voter && <label className="select-label pin-label">Seu código individual
-              <input value={pin} inputMode="numeric" maxLength={6} placeholder="Digite seus 6 números" onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
-            </label>}
-            {voter ? <>
+              async function identifyVoter() {
+    if (pin.length !== 6) return setNotice("Digite o seu código individual de 6 números.");
+    setSaving(true);
+    try {
+      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Código inválido.");
+      const name = data.voter as string;
+      setVoter(name);
+      const saved = typeof window !== "undefined" ? localStorage.getItem("areia:draft:" + name) : null;
+      try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
+      setPlayerIndex(0);
+      setEditing(Boolean(votes[name]));
+      setNotice("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
+    } finally {
+      setSaving(false);
+    }
+  }
               <div className="voter-badge"><b>Você está avaliando como:</b> {voter}</div>
               <div className="player-progress"><div><i style={{width:`${((playerIndex + 1) / 19) * 100}%`}} /></div><span>Jogador {playerIndex + 1} de 19</span></div>
               <div className="focus-player"><span>{currentPlayer?.slice(0,1)}</span><div><small>JOGADOR SENDO AVALIADO</small><h3>{currentPlayer}</h3></div></div>
