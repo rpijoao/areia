@@ -1,1 +1,3 @@
-# areia
+# Areia Equilibrada
+
+Site temporariamente pausado.
