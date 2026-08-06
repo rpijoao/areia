@@ -26,3 +26,15 @@ export async function PUT(request: Request) {
   await sql`UPDATE app_settings SET players = ${JSON.stringify(players)}::jsonb, updated_at = NOW() WHERE id = 1`;
   return NextResponse.json({ ok: true });
 }
+
+// O Admin pode liberar uma pessoa para corrigir a própria resposta. Isso apaga
+// somente a ficha daquela pessoa; ela precisa entrar com o próprio código de novo.
+export async function DELETE(request: Request) {
+  if (!allowed(request)) return NextResponse.json({ error: "Acesso administrativo negado." }, { status: 401 });
+  const body = await request.json();
+  const voter = typeof body.voter === "string" ? body.voter.trim() : "";
+  if (!voter) return NextResponse.json({ error: "Informe o jogador a liberar." }, { status: 400 });
+  const sql = getSql();
+  await sql`DELETE FROM ballots WHERE voter_name = ${voter}`;
+  return NextResponse.json({ ok: true });
+}
