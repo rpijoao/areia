@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
+import { limited } from "../../../lib/security";
 
 export async function POST(request: Request) {
   try {
+    if (await limited(request, "player-code", 8)) {
+      return NextResponse.json({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, { status: 429 });
+    }
     const body = await request.json();
     const pin = String(body?.pin ?? "").replace(/\D/g, "");
     if (pin.length !== 6) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
+import { limited } from "../../../lib/security";
 
 const SKILLS = new Set(["levantamento", "passe", "ataque", "saque"]);
 const MIN_PLAYERS_RATED = 10;
@@ -59,10 +60,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (await limited(request, "vote-submit", 5)) {
+      return NextResponse.json({ error: "Muitas tentativas de envio. Aguarde 15 minutos." }, { status: 429 });
+    }
     const body = await request.json();
     const pin = String(body.pin ?? "").replace(/\D/g, "");
     const ratings = body.ratings && typeof body.ratings === "object" ? body.ratings : {};
     const sql = getSql();
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS ballots_voter_name_unique ON ballots (voter_name)`;
     const settings = await sql`SELECT players FROM app_settings WHERE id = 1`;
     const players: string[] = settings[0]?.players ?? [];
     const access = await sql`SELECT player_name FROM player_access WHERE pin = ${pin} LIMIT 1`;
@@ -75,12 +80,13 @@ export async function POST(request: Request) {
     for (const [player, scores] of Object.entries(ratings)) {
       if (!players.includes(player) || player === voter || !scores || typeof scores !== "object") continue;
       const valid = Object.fromEntries(Object.entries(scores).filter(([skill, score]) => SKILLS.has(skill) && Number.isInteger(score) && Number(score) >= 1 && Number(score) <= 5));
-      if (Object.keys(valid).length) clean[player] = valid as Scores;
+      if (Object.keys(valid).length === SKILLS.size) clean[player] = valid as Scores;
     }
     if (Object.keys(clean).length < MIN_PLAYERS_RATED) return NextResponse.json({ error: `Avalie pelo menos ${MIN_PLAYERS_RATED} jogadores para enviar.` }, { status: 400 });
     await sql`INSERT INTO ballots (voter_name, ratings, updated_at) VALUES (${voter}, ${JSON.stringify(clean)}::jsonb, NOW())`;
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (error) {
+    if (String(error).includes("unique")) return NextResponse.json({ error: "Sua resposta já foi registrada." }, { status: 409 });
     return NextResponse.json({ error: "Não foi possível registrar a avaliação." }, { status: 500 });
   }
 }

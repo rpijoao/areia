@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
+import { limited } from "../../../lib/security";
 
 function allowed(request: Request) {
   const configured = process.env.ADMIN_PIN;
@@ -7,11 +8,12 @@ function allowed(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (await limited(request, "admin", 8)) return NextResponse.json({ error: "Muitas tentativas. Aguarde 15 minutos." }, { status: 429 });
   if (!allowed(request)) return NextResponse.json({ error: "Acesso administrativo negado." }, { status: 401 });
   const sql = getSql();
   const [settings, ballots, access] = await Promise.all([
     sql`SELECT players FROM app_settings WHERE id = 1`,
-    sql`SELECT voter_name, ratings, updated_at FROM ballots ORDER BY voter_name`,
+    sql`SELECT voter_name, updated_at FROM ballots ORDER BY voter_name`,
     sql`SELECT player_name, pin FROM player_access ORDER BY player_name`,
   ]);
   return NextResponse.json({ players: settings[0]?.players ?? [], ballots, access });
@@ -20,10 +22,25 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   if (!allowed(request)) return NextResponse.json({ error: "Acesso administrativo negado." }, { status: 401 });
   const body = await request.json();
-  const players = Array.isArray(body.players) ? body.players.map((name: unknown) => typeof name === "string" ? name.trim() : "") : [];
+  const players: string[] = Array.isArray(body.players) ? body.players.map((name: unknown): string => typeof name === "string" ? name.trim() : "") : [];
   if (players.length !== 20 || players.some((name: string) => !name) || new Set(players.map((name: string) => name.toLocaleLowerCase())).size !== 20) return NextResponse.json({ error: "Informe 20 nomes diferentes." }, { status: 400 });
   const sql = getSql();
-  await sql`UPDATE app_settings SET players = ${JSON.stringify(players)}::jsonb, updated_at = NOW() WHERE id = 1`;
+  const [settings, ballots, access] = await Promise.all([
+    sql`SELECT players FROM app_settings WHERE id = 1`,
+    sql`SELECT 1 FROM ballots LIMIT 1`,
+    sql`SELECT pin FROM player_access ORDER BY player_name`,
+  ]);
+  const previous: string[] = settings[0]?.players ?? [];
+  if (ballots.length && JSON.stringify(previous) !== JSON.stringify(players)) return NextResponse.json({ error: "Não altere nomes depois que as avaliações começarem." }, { status: 409 });
+  if (!ballots.length && access.length === 20 && JSON.stringify(previous) !== JSON.stringify(players)) {
+    await sql.transaction([
+      sql`DELETE FROM player_access`,
+      ...players.map((player, index) => sql`INSERT INTO player_access (player_name, pin) VALUES (${player}, ${access[index].pin})`),
+      sql`UPDATE app_settings SET players = ${JSON.stringify(players)}::jsonb, updated_at = NOW() WHERE id = 1`,
+    ]);
+  } else {
+    await sql`UPDATE app_settings SET players = ${JSON.stringify(players)}::jsonb, updated_at = NOW() WHERE id = 1`;
+  }
   return NextResponse.json({ ok: true });
 }
 

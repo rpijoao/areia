@@ -6,6 +6,7 @@ type Skill = "levantamento" | "passe" | "ataque" | "saque";
 type SkillScore = Partial<Record<Skill, number>>;
 type PlayerResult = { name: string; average: number | null; votes: number; pot: string | null };
 type Pair = { a: PlayerResult; b: PlayerResult };
+type Team = { players: PlayerResult[]; total: number; capacity: number };
 
 const SKILLS: { key: Skill; label: string; help: string }[] = [
   { key: "levantamento", label: "Levantamento", help: "Controle, altura e precisão" },
@@ -26,6 +27,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [pairs, setPairs] = useState<Pair[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
 
   async function loadState() {
     try {
@@ -109,6 +111,24 @@ export default function Home() {
     const half = Math.floor(ranked.length / 2);
     const next = ranked.slice(0, half).map((a, position) => ({ a, b: ranked[ranked.length - 1 - position] }));
     setPairs(next.sort(() => Math.random() - 0.5));
+    setTeams([]);
+    setNotice("");
+  }
+
+  function drawTrios() {
+    const ranked = results.filter((player) => player.average !== null);
+    if (ranked.length !== players.length || ranked.some((player) => player.votes < 5)) {
+      return setNotice("O sorteio será liberado quando todos receberem pelo menos 5 avaliações.");
+    }
+    const groups: Team[] = [3, 3, 3, 3, 3, 3, 2].map((capacity) => ({ players: [], total: 0, capacity }));
+    [...ranked].sort((a, b) => (b.average || 0) - (a.average || 0)).forEach((player) => {
+      const available = groups.filter((group) => group.players.length < group.capacity).sort((a, b) => a.total - b.total || a.players.length - b.players.length);
+      const group = available[0];
+      group.players.push(player);
+      group.total += player.average || 0;
+    });
+    setTeams(groups);
+    setPairs([]);
     setNotice("");
   }
 
@@ -137,10 +157,10 @@ export default function Home() {
           <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
           <button className="unknown" type="button" onClick={skipCurrent}>Não conheço bem este jogador — deixar em branco</button>
           <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={() => setIndex((value) => value - 1)}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={() => setIndex((value) => value + 1)}>Próximo →</button> : <button className="primary" disabled={saving} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
-          <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. É preciso avaliar pelo menos 10 pessoas.</p>
+          <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. Para cada pessoa avaliada, dê nota nos 4 fundamentos. É preciso avaliar pelo menos 10 pessoas.</p>
         </>}
         {notice && <p className={notice.includes("registrada") ? "notice success" : "notice"}>{notice}</p>}
       </div>
-    </section> : <section className="content"><div className="section-title"><div><span className="step">RESULTADOS</span><h2>Ranking do grupo</h2><p>As médias ignoram campos em branco. As notas individuais nunca aparecem aqui.</p></div><button className="primary" onClick={drawPairs}>{pairs.length ? "Refazer duplas" : "Sortear duplas"}</button></div>{notice && <p className="notice">{notice}</p>}<div className="results-layout"><div className="ranking"><div className="table-head"><span>#</span><span>Jogador</span><span>Notas</span><span>Média</span><span>Pote</span></div>{results.map((player, position) => <div className="rank-row" key={player.name}><span className="position">{position + 1}</span><span className="rank-name"><i>{player.name.slice(0, 1)}</i>{player.name}</span><span>{player.votes}</span><b>{player.average === null ? "—" : player.average.toFixed(2).replace(".", ",")}</b><span className={`pot pot-${player.pot || "—"}`}>{player.pot || "—"}</span></div>)}</div><aside className="pots"><h3>Potes automáticos</h3>{["A", "B", "C", "D"].map((pot) => <div className={`pot-card pot-card-${pot}`} key={pot}><b>Pote {pot}</b><span>{results.filter((player) => player.pot === pot).map((player) => player.name).join(" · ") || "Aguardando notas"}</span></div>)}</aside></div>{pairs.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Duplas formadas</h2></div><div className="pairs-grid">{pairs.map((pair, position) => <div className="pair-card" key={`${pair.a.name}-${pair.b.name}`}><span>Dupla {String(position + 1).padStart(2, "0")}</span><div><b>{pair.a.name}</b><em>{pair.a.average?.toFixed(2)}</em></div><i>+</i><div><b>{pair.b.name}</b><em>{pair.b.average?.toFixed(2)}</em></div><small>Média: {(((pair.a.average || 0) + (pair.b.average || 0)) / 2).toFixed(2)}</small></div>)}</div></div>}</section>}
+    </section> : <section className="content"><div className="section-title"><div><span className="step">RESULTADOS</span><h2>Ranking do grupo</h2><p>As médias ignoram campos em branco. As notas individuais nunca aparecem aqui.</p></div><div><button className="secondary" onClick={drawTrios}>{teams.length ? "Refazer trios" : "Sortear trios"}</button> <button className="primary" onClick={drawPairs}>{pairs.length ? "Refazer duplas" : "Sortear duplas"}</button></div></div>{notice && <p className="notice">{notice}</p>}<div className="results-layout"><div className="ranking"><div className="table-head"><span>#</span><span>Jogador</span><span>Notas</span><span>Média</span><span>Pote</span></div>{results.map((player, position) => <div className="rank-row" key={player.name}><span className="position">{position + 1}</span><span className="rank-name"><i>{player.name.slice(0, 1)}</i>{player.name}</span><span>{player.votes}</span><b>{player.average === null ? "—" : player.average.toFixed(2).replace(".", ",")}</b><span className={`pot pot-${player.pot || "—"}`}>{player.pot || "—"}</span></div>)}</div><aside className="pots"><h3>Potes automáticos</h3>{["A", "B", "C", "D"].map((pot) => <div className={`pot-card pot-card-${pot}`} key={pot}><b>Pote {pot}</b><span>{results.filter((player) => player.pot === pot).map((player) => player.name).join(" · ") || "Aguardando notas"}</span></div>)}</aside></div>{pairs.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Duplas formadas</h2></div><div className="pairs-grid">{pairs.map((pair, position) => <div className="pair-card" key={`${pair.a.name}-${pair.b.name}`}><span>Dupla {String(position + 1).padStart(2, "0")}</span><div><b>{pair.a.name}</b><em>{pair.a.average?.toFixed(2)}</em></div><i>+</i><div><b>{pair.b.name}</b><em>{pair.b.average?.toFixed(2)}</em></div><small>Média: {(((pair.a.average || 0) + (pair.b.average || 0)) / 2).toFixed(2)}</small></div>)}</div></div>}{teams.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Trios formados</h2><p>Com 20 jogadores, serão 6 trios e 1 dupla.</p></div><div className="pairs-grid">{teams.map((team, position) => <div className="pair-card" key={position}><span>{team.players.length === 3 ? "Trio" : "Dupla"} {String(position + 1).padStart(2, "0")}</span>{team.players.map((player) => <div key={player.name}><b>{player.name}</b><em>{player.average?.toFixed(2)}</em></div>)}<small>Média: {(team.total / team.players.length).toFixed(2)}</small></div>)}</div></div>}</section>}
   </main>;
 }
