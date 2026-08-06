@@ -30,7 +30,33 @@ export default function Home() {
   // Mantém a página pública fechada até a validação final. Para reabrir, defina
   // NEXT_PUBLIC_SITE_PAUSED=false no Vercel e publique novamente.
   if (process.env.NEXT_PUBLIC_SITE_PAUSED === "true") {
-    return <main><header className="topbar"><a className="brand" href="#top"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a><a className="primary" href="/admin">Área Admin</a></header><section className="hero" id="top"><div><span className="eyebrow">VÔLEI DE PRAIA</span><h1>Site <em>pausado.</em></h1><p>Estamos preparando uma nova rodada de avaliações mais justa e segura.</p><a className="primary" href="/admin">Entrar como administrador</a></div></section><footer><span>🏐</span><b>Areia Equilibrada</b></footer></main>;
+    return (
+      <main className="paused-page" id="top">
+        <header className="topbar paused-topbar">
+          <a className="brand" href="#top" aria-label="Areia Equilibrada">
+            <span className="brand-mark">AE</span>
+            <span>Areia <b>Equilibrada</b></span>
+          </a>
+          <a className="admin-link" href="/admin">Área Admin <span>→</span></a>
+        </header>
+        <section className="paused-hero">
+          <div className="paused-copy">
+            <span className="eyebrow">VÔLEI DE PRAIA · NOVA RODADA</span>
+            <h1>Voltamos <em>em breve.</em></h1>
+            <p>Estamos ajustando as avaliações para deixar o próximo sorteio mais justo, seguro e equilibrado para todo mundo.</p>
+            <div className="paused-status"><span>●</span> Avaliações temporariamente fechadas</div>
+            <a className="primary paused-admin-cta" href="/admin">Acessar painel administrativo <span>→</span></a>
+          </div>
+          <div className="paused-card" aria-hidden="true">
+            <div className="paused-card-top"><span>AREIA EQUILIBRADA</span><i>●</i></div>
+            <div className="volley-ball"><span>◜</span><span>◞</span><span>◟</span></div>
+            <strong>Jogo limpo.<br />Times equilibrados.</strong>
+            <small>EM PREPARAÇÃO</small>
+          </div>
+        </section>
+        <footer className="paused-footer"><span>🏐</span><b>Areia Equilibrada</b><small>Vôlei de praia</small></footer>
+      </main>
+    );
   }
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [votes, setVotes] = useState<VoteMap>({});
