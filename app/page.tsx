@@ -249,13 +249,28 @@ export default function Home() {
         <section className="content two-col">
           <aside className="instruction-card">
             <span className="step">COMO FUNCIONA</span>
-            <h2>Sua opinião conta</h2>
-            <ol><li><b>Escolha seu nome</b><span>Você não poderá avaliar a si mesmo.</span></li><li><b>Um jogador por vez</b><span>Avalie levantamento, passe, ataque e saque.</span></li><li><b>Conclua e envie</b><span>Não conhece alguém? Avance deixando em branco.</span></li></ol>
-            <div className="privacy">🔒 As notas individuais ficam em sigilo. Só as médias aparecem nos resultados.</div>
-          </aside>
-          <div className="panel">
-            {!ready && <p className="notice success">Carregando avaliações compartilhadas...</p>}
-              async function identifyVoter() {
+            <h  async function identifyVoter() {
+    if (pin.length !== 6) return setNotice("Digite o seu código individual de 6 números.");
+    setSaving(true);
+    try {
+      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Código inválido.");
+      const name = data.voter as string;
+      setVoter(name);
+      const saved = typeof window !== "undefined" ? localStorage.getItem("areia:draft:" + name) : null;
+      try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
+      setPlayerIndex(0);
+      setEditing(Boolean(votes[name]));
+      setNotice("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function identifyVoter() {
     if (pin.length !== 6) return setNotice("Digite o seu código individual de 6 números.");
     setSaving(true);
     try {
