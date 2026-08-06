@@ -60,15 +60,14 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const voter = typeof body.voter === "string" ? body.voter.trim() : "";
-    const pin = typeof body.pin === "string" ? body.pin.trim() : "";
+    const pin = String(body.pin ?? "").replace(/\D/g, "");
     const ratings = body.ratings && typeof body.ratings === "object" ? body.ratings : {};
     const sql = getSql();
     const settings = await sql`SELECT players FROM app_settings WHERE id = 1`;
     const players: string[] = settings[0]?.players ?? [];
-    if (!players.includes(voter)) return NextResponse.json({ error: "Participante inválido." }, { status: 400 });
-    const access = await sql`SELECT 1 FROM player_access WHERE player_name = ${voter} AND pin = ${pin}`;
-    if (!access.length) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
+    const access = await sql`SELECT player_name FROM access_codes WHERE pin = ${pin} LIMIT 1`;
+    const voter = access[0]?.player_name;
+    if (!voter || !players.includes(voter)) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
     const previous = await sql`SELECT 1 FROM ballots WHERE voter_name = ${voter}`;
     if (previous.length) return NextResponse.json({ error: "Sua resposta já foi enviada e está bloqueada. Peça ao administrador para liberar uma correção." }, { status: 409 });
 

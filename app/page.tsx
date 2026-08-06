@@ -1,196 +1,146 @@
-                    // A identidade só é liberada após validar o código individual.
-  }, [players, votes]);
-  const results = serverResults.length ? serverResults : localResults;
+"use client";
 
-  const completed = responses;
-  const ratedInDraft = Object.values(draft).filter((rating) => Object.keys(rating).length > 0).length;
-  const candidates = players.filter((name) => name !== voter);
-  const currentPlayer = candidates[playerIndex];
+import { useEffect, useMemo, useState } from "react";
 
-              {!voter && <>
-              <label className="select-label pin-label">Seu código individual
-                <input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Digite os 6 números recebidos" onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} />
-              </label>
-              <button className="primary" disabled={saving} onClick={identifyVoter}>{saving ? "Validando..." : "Continuar com meu código →"}</button>
-              <p className="privacy">O código identifica você automaticamente. Não há lista de nomes nesta tela.</p>
-                        <div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div>{voter && <span className="draft-count">{ratedInDraft}/19 avaliados</span>}</div><b>Digite seu código para começar</b> setSkill(skill: Skill, score?: number) {
-    if (!currentPlayer) return;
+type Skill = "levantamento" | "passe" | "ataque" | "saque";
+type SkillScore = Partial<Record<Skill, number>>;
+type PlayerResult = { name: string; average: number | null; votes: number; pot: string | null };
+type Pair = { a: PlayerResult; b: PlayerResult };
+
+const SKILLS: { key: Skill; label: string; help: string }[] = [
+  { key: "levantamento", label: "Levantamento", help: "Controle, altura e precisão" },
+  { key: "passe", label: "Passe", help: "Recepção e domínio da primeira bola" },
+  { key: "ataque", label: "Ataque", help: "Direção, força e decisão" },
+  { key: "saque", label: "Saque", help: "Consistência e pressão" },
+];
+
+export default function Home() {
+  const [players, setPlayers] = useState<string[]>([]);
+  const [results, setResults] = useState<PlayerResult[]>([]);
+  const [responses, setResponses] = useState(0);
+  const [view, setView] = useState<"votar" | "resultados">("votar");
+  const [pin, setPin] = useState("");
+  const [voter, setVoter] = useState("");
+  const [draft, setDraft] = useState<Record<string, SkillScore>>({});
+  const [index, setIndex] = useState(0);
+  const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pairs, setPairs] = useState<Pair[]>([]);
+
+  async function loadState() {
+    try {
+      const response = await fetch("/api/state", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setPlayers(Array.isArray(data.players) ? data.players : []);
+      setResults(Array.isArray(data.results) ? data.results : []);
+      setResponses(typeof data.responses === "number" ? data.responses : 0);
+    } catch {
+      setNotice("Não foi possível carregar os dados agora. Tente novamente.");
+    }
+  }
+
+  useEffect(() => { void loadState(); }, []);
+  useEffect(() => {
+    if (voter) localStorage.setItem(`areia:rascunho:${voter}`, JSON.stringify(draft));
+  }, [voter, draft]);
+
+  const candidates = useMemo(() => players.filter((name) => name !== voter), [players, voter]);
+  const current = candidates[index];
+  const ratedCount = Object.values(draft).filter((scores) => Object.keys(scores).length > 0).length;
+
+  async function identifyVoter() {
+    if (pin.length !== 6) return setNotice("Digite o código individual de 6 números.");
+    setSaving(true);
+    try {
+      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Código inválido.");
+      const name = String(data.voter || "");
+      if (!name) throw new Error("Não foi possível identificar o jogador.");
+      setVoter(name);
+      const saved = localStorage.getItem(`areia:rascunho:${name}`);
+      try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
+      setIndex(0);
+      setNotice("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
+    } finally { setSaving(false); }
+  }
+
+  function setScore(skill: Skill, value?: number) {
+    if (!current) return;
+    const player = current;
     setDraft((old) => {
-      const rating = { ...(old[currentPlayer] || {}) };
-      if (score) rating[skill] = score; else delete rating[skill];
+      const scores = { ...(old[player] || {}) };
+      if (value) scores[skill] = value; else delete scores[skill];
       const next = { ...old };
-      if (Object.keys(rating).length) next[currentPlayer] = rating; else delete next[currentPlayer];
+      if (Object.keys(scores).length) next[player] = scores; else delete next[player];
       return next;
     });
   }
 
-  async function saveBallot() {
-    if (!voter) return setNotice("Escolha seu nome antes de começar.");
-    if (pin.length !== 6) return setNotice("Digite seu código individual de 6 números.");
-    if (!ratedInDraft) return setNotice("Avalie pelo menos uma pessoa para registrar sua resposta.");
-    const clean = { ...draft };
-    delete clean[voter];
+  function skipCurrent() {
+    if (!current) return;
+    setDraft((old) => { const next = { ...old }; delete next[current]; return next; });
+    if (index < candidates.length - 1) setIndex((value) => value + 1);
+  }
+
+  async function submit() {
+    if (ratedCount < 10) return setNotice(`Avalie pelo menos 10 jogadores. Faltam ${10 - ratedCount}.`);
     setSaving(true);
     try {
-      const response = await fetch("/api/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voter, pin, ratings: clean }) });
+      const response = await fetch("/api/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin, ratings: draft }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      localStorage.setItem(`areia:draft:${voter}`, JSON.stringify(clean));
-      setNotice(editing ? "Avaliação atualizada com sucesso." : "Avaliação registrada com sucesso!");
-      setEditing(true);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível salvar."); }
-    finally { setSaving(false); }
-  }
-
-  async function openAdmin() {
-    const response = await fetch("/api/admin", { headers: { "x-admin-pin": adminPin } });
-    const data = await response.json();
-    if (response.ok) {
-      setAdminPlayers(data.players ?? []);
-      setAccessCodes(data.access ?? []);
-      setAdminBallots(data.ballots ?? []);
-      setAdminMessage(`Acesso liberado. ${data.ballots?.length ?? 0} respostas registradas.`);
-    } else setAdminMessage(data.error || "Senha inválida.");
-  }
-
-  async function saveAdminPlayers() {
-    const response = await fetch("/api/admin", { method: "PUT", headers: { "Content-Type": "application/json", "x-admin-pin": adminPin }, body: JSON.stringify({ players: adminPlayers }) });
-    const data = await response.json();
-    setAdminMessage(response.ok ? "Lista de jogadores atualizada." : (data.error || "Não foi possível salvar."));
-    if (response.ok) setPlayers(adminPlayers);
-  }
-
-  async function releaseVote(voterName: string) {
-    const response = await fetch("/api/admin", { method: "DELETE", headers: { "Content-Type": "application/json", "x-admin-pin": adminPin }, body: JSON.stringify({ voter: voterName }) });
-    const data = await response.json();
-    if (response.ok) {
-      setAdminBallots((old) => old.filter((ballot) => ballot.voter_name !== voterName));
-      setAdminMessage(`${voterName} foi liberado para corrigir a resposta.`);
-    } else setAdminMessage(data.error || "Não foi possível liberar.");
+      if (!response.ok) throw new Error(data.error || "Não foi possível registrar.");
+      localStorage.removeItem(`areia:rascunho:${voter}`);
+      setNotice("Avaliação registrada. Obrigado!");
+      await loadState();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível salvar a avaliação.");
+    } finally { setSaving(false); }
   }
 
   function drawPairs() {
-    const ranked = results.filter((p) => p.average !== null);
-    if (ranked.length !== 20) return setNotice("Todos os jogadores precisam receber ao menos uma nota antes do sorteio.");
-    if (ranked.some((player) => player.votes < 5)) return setNotice("Aguarde cada jogador receber ao menos 5 avaliações antes de sortear.");
-    const top = ranked.slice(0, 10);
-    const bottom = ranked.slice(10).reverse();
-    const newPairs = top.map((a, i) => ({ a, b: bottom[i] }));
-    for (let i = newPairs.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newPairs[i], newPairs[j]] = [newPairs[j], newPairs[i]];
+    const ranked = results.filter((player) => player.average !== null);
+    if (ranked.length !== players.length || ranked.some((player) => player.votes < 5)) {
+      return setNotice("O sorteio será liberado quando todos receberem pelo menos 5 avaliações.");
     }
-    setPairs(newPairs);
-    setTeams([]);
+    const half = Math.floor(ranked.length / 2);
+    const next = ranked.slice(0, half).map((a, position) => ({ a, b: ranked[ranked.length - 1 - position] }));
+    setPairs(next.sort(() => Math.random() - 0.5));
     setNotice("");
   }
 
-  function drawTrios() {
-    const ranked = results.filter((p) => p.average !== null);
-    if (ranked.length !== 20) return setNotice("Todos os jogadores precisam receber ao menos uma nota antes do sorteio.");
-    if (ranked.some((player) => player.votes < 5)) return setNotice("Aguarde cada jogador receber ao menos 5 avaliações antes de sortear.");
-    const groups: Team[] = [3, 3, 3, 3, 3, 3, 2].map((size) => ({ players: [], total: 0, size } as Team & { size: number }));
-    for (const player of ranked) {
-      const available = groups.filter((group) => group.players.length < (group as Team & { size: number }).size);
-      available.sort((a, b) => a.total - b.total || a.players.length - b.players.length)[0].players.push(player);
-      const target = available[0];
-      target.total += player.average ?? 0;
-    }
-    setTeams(groups);
-    setPairs([]);
-    setNotice("");
-  }
-
-  return (
-    <main>
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Areia Equilibrada, início"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a>
-        <nav aria-label="Navegação principal">
-          <button className={view === "votar" ? "active" : ""} onClick={() => { setView("votar"); setNotice(""); }}>Avaliar</button>
-          <button className={view === "resultados" ? "active" : ""} onClick={() => { setView("resultados"); setNotice(""); }}>Resultados</button>
-          <button className={view === "admin" ? "active" : ""} onClick={() => { setView("admin"); setNotice(""); }}>Admin</button>
-        </nav>
-      </header>
-
-      <section className="hero" id="top">
-        <div>
-          <span className="eyebrow">VÔLEI DE PRAIA • 20 JOGADORES</span>
-          <h1>Times mais justos.<br/><em>Jogo mais divertido.</em></h1>
-          <p>Avaliações anônimas entre o grupo ajudam a criar duplas equilibradas — sem achismo e sem panelinha.</p>
-        </div>
-        <div className="hero-score" aria-label={`${completed} de 20 participantes responderam`}>
-          <div className="ball"><span>{completed}</span><small>de 20</small></div>
-          <div><b>Respostas recebidas</b><span>{completed === 20 ? "Grupo completo!" : `Faltam ${20 - completed} participantes`}</span></div>
-        </div>
-      </section>
-
-      <div className="progress-wrap" aria-label={`Progresso: ${completed * 5}%`}><div className="progress"><i style={{ width: `${completed * 5}%` }} /></div><span>{completed * 5}% concluído</span></div>
-
-      {view === "votar" && (
-        <section className="content two-col">
-          <aside className="instruction-card">
-            <span className="step">COMO FUNCIONA</span>
-            <h  async function identifyVoter() {
-    if (pin.length !== 6) return setNotice("Digite o seu código individual de 6 números.");
-    setSaving(true);
-    try {
-      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Código inválido.");
-      const name = data.voter as string;
-      setVoter(name);
-      const saved = typeof window !== "undefined" ? localStorage.getItem("areia:draft:" + name) : null;
-      try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
-      setPlayerIndex(0);
-      setEditing(Boolean(votes[name]));
-      setNotice("");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function identifyVoter() {
-    if (pin.length !== 6) return setNotice("Digite o seu código individual de 6 números.");
-    setSaving(true);
-    try {
-      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Código inválido.");
-      const name = data.voter as string;
-      setVoter(name);
-      const saved = typeof window !== "undefined" ? localStorage.getItem("areia:draft:" + name) : null;
-      try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
-      setPlayerIndex(0);
-      setEditing(Boolean(votes[name]));
-      setNotice("");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
-    } finally {
-      setSaving(false);
-    }
-  }
-              <div className="voter-badge"><b>Você está avaliando como:</b> {voter}</div>
-              <div className="player-progress"><div><i style={{width:`${((playerIndex + 1) / 19) * 100}%`}} /></div><span>Jogador {playerIndex + 1} de 19</span></div>
-              <div className="focus-player"><span>{currentPlayer?.slice(0,1)}</span><div><small>JOGADOR SENDO AVALIADO</small><h3>{currentPlayer}</h3></div></div>
-              <div className="rating-guide"><b>1</b> Iniciante <span>→</span> <b>3</b> Intermediário <span>→</span> <b>5</b> Avançado</div>
-              <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons" aria-label={`${skill.label} de ${currentPlayer}`}>{[1,2,3,4,5].map((score) => <button key={score} className={draft[currentPlayer]?.[skill.key] === score ? "selected" : ""} title={scoreLabel(score)} onClick={() => setSkill(skill.key, score)}>{score}</button>)}<button className="clear" aria-label={`Limpar nota de ${skill.label}`} onClick={() => setSkill(skill.key)}>×</button></div></div>)}</div>
-              <button className="unknown" onClick={() => setDraft((old) => { const next={...old}; delete next[currentPlayer]; return next; })}>Não conheço bem este jogador — deixar em branco</button>
-              <div className="wizard-actions"><button className="secondary" disabled={playerIndex === 0 || saving} onClick={() => setPlayerIndex((i) => Math.max(0,i-1))}>← Corrigir jogador anterior</button>{playerIndex < 18 ? <button className="primary" onClick={() => { setPlayerIndex((i) => Math.min(18,i+1)); setNotice(""); }}>Próximo jogador →</button> : <button className="primary" disabled={saving} onClick={saveBallot}>{saving ? "Salvando..." : editing ? "Atualizar avaliação" : "Concluir e registrar"}</button>}</div>
-              <p className="privacy">Para validar sua resposta, avalie pelo menos 10 jogadores. O rascunho é salvo automaticamente neste celular.</p>
-              <button className="save-partial" disabled={saving || ratedInDraft < 10} onClick={saveBallot}>{saving ? "Salvando..." : ratedInDraft < 10 ? `Faltam ${10 - ratedInDraft} avaliações para enviar` : `Salvar ${ratedInDraft} avaliações com segurança`}</button>
-              {notice && <p className={notice.includes("sucesso") || notice.includes("atualizada") ? "notice success" : "notice"}>{notice}</p>}
-            </> : <div className="empty"><span>🏐</span><b>Escolha seu nome para começar</b><p>Os outros 19 jogadores aparecerão aqui.</p></div>}
-          </div>
-        </section>
-      )}
-
-      {view === "admin" && <section className="content"><div className="panel"><span className="step">ÁREA RESTRITA</span><h2>Painel administrativo</h2><p>Somente aqui é possível conferir respostas e alterar jogadores. Os participantes nunca veem notas individuais.</p><label className="select-label">Senha do administrador<input type="password" value={adminPin} onChange={(e) => setAdminPin(e.target.value)} placeholder="Digite a senha" /></label><button className="primary" onClick={openAdmin}>Entrar no painel</button>{adminMessage && <p className={adminMessage.includes("liberado") || adminMessage.includes("atualizada") ? "notice success" : "notice"}>{adminMessage}</p>}{adminPlayers.length > 0 && <><div className="section-title"><div><span className="step">JOGADORES</span><h2>Lista oficial</h2></div><button className="primary" onClick={saveAdminPlayers}>Salvar lista</button></div><div className="name-grid">{adminPlayers.map((name, index) => <label key={index}><span>{String(index + 1).padStart(2, "0")}</span><input value={name} onChange={(e) => setAdminPlayers((old) => old.map((item, i) => i === index ? e.target.value : item))} /></label>)}</div><div className="results-layout"><div className="ranking"><div className="table-head"><span>#</span><span>Jogador</span><span>Código</span><span></span><span></span></div>{accessCodes.map((item, index) => <div className="rank-row" key={item.player_name}><span className="position">{index + 1}</span><span className="rank-name">{item.player_name}</span><b>{item.pin}</b><span></span><span></span></div>)}</div><aside className="pots"><h3>Códigos individuais</h3><p>Entregue cada código somente ao respectivo jogador. Eles não aparecem fora deste painel.</p></aside></div><div className="ranking"><div className="table-head"><span>#</span><span>Resposta bloqueada</span><span></span><span></span><span></span></div>{adminBallots.map((ballot, index) => <div className="rank-row" key={ballot.voter_name}><span className="position">{index + 1}</span><span className="rank-name">{ballot.voter_name}</span><button className="secondary" onClick={() => releaseVote(ballot.voter_name)}>Liberar correção</button><span></span><span></span></div>)}</div></>}</div></section>}
-
-      {view === "resultados" && <section className="content"><div className="section-title"><div><span className="step">RESULTADOS</span><h2>Ranking do grupo</h2><p>A média ignora avaliações em branco. “Notas” mostra quantas pessoas avaliaram aquele jogador.</p></div><div><button className={teamMode === "duplas" ? "primary" : "secondary"} onClick={() => { setTeamMode("duplas"); drawPairs(); }}>{pairs.length ? "Refazer duplas" : "Sortear duplas"}</button> <button className={teamMode === "trios" ? "primary" : "secondary"} onClick={() => { setTeamMode("trios"); drawTrios(); }}>{teams.length ? "Refazer trios" : "Sortear trios"}</button></div></div>{notice && <p className="notice">{notice}</p>}<div className="results-layout"><div className="ranking"><div className="table-head"><span>#</span><span>Jogador</span><span>Notas</span><span>Média</span><span>Pote</span></div>{results.map((p, i) => <div className="rank-row" key={p.name}><span className="position">{i + 1}</span><span className="rank-name"><i>{p.name.slice(0,1)}</i>{p.name}</span><span>{p.votes}</span><b>{p.average === null ? "—" : p.average.toFixed(2).replace(".", ",")}</b><span className={`pot pot-${p.pot}`}>{p.pot}</span></div>)}</div><aside className="pots"><h3>Divisão por potes</h3>{["A","B","C","D"].map((pot) => <div className={`pot-card pot-card-${pot}`} key={pot}><b>Pote {pot}</b><span>{results.filter((p) => p.pot === pot).map((p) => p.name).join(" • ") || "Aguardando notas"}</span></div>)}<small>As contagens podem ser diferentes porque é permitido deixar alguém em branco.</small></aside></div>{pairs.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Duplas formadas</h2></div><div className="pairs-grid">{pairs.map((pair, i) => <div className="pair-card" key={i}><span>Dupla {String(i + 1).padStart(2,"0")}</span><div><b>{pair.a.name}</b><em>{pair.a.average?.toFixed(2)}</em></div><i>+</i><div><b>{pair.b.name}</b><em>{pair.b.average?.toFixed(2)}</em></div><small>Média da dupla: {(((pair.a.average ?? 0) + (pair.b.average ?? 0))/2).toFixed(2)}</small></div>)}</div></div>}{teams.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Trios formados</h2><p>São 6 trios e 1 dupla, pois o grupo tem 20 jogadores.</p></div><div className="pairs-grid">{teams.map((team, i) => <div className="pair-card" key={i}><span>{team.players.length === 3 ? "Trio" : "Dupla"} {String(i + 1).padStart(2,"0")}</span>{team.players.map((player) => <div key={player.name}><b>{player.name}</b><em>{player.average?.toFixed(2)}</em></div>)}<small>Média do time: {(team.total / team.players.length).toFixed(2)}</small></div>)}</div></div>}</section>}
-
-      <footer><span>🏐</span><b>Areia Equilibrada</b><p>Feito para o jogo ser bom para todo mundo.</p></footer>
-    </main>
-  );
+  return <main id="top">
+    <header className="topbar">
+      <a className="brand" href="#top"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a>
+      <nav aria-label="Navegação principal">
+        <button className={view === "votar" ? "active" : ""} onClick={() => setView("votar")}>Avaliar</button>
+        <button className={view === "resultados" ? "active" : ""} onClick={() => setView("resultados")}>Resultados</button>
+        <a className="admin-link" href="/admin">Admin</a>
+      </nav>
+    </header>
+    <section className="hero">
+      <div><span className="eyebrow">VÔLEI DE PRAIA · GRUPO</span><h1>Jogo justo.<br /><em>Times equilibrados.</em></h1><p>Cada pessoa avalia os demais por fundamento. As notas em branco são ignoradas.</p></div>
+      <div className="hero-score"><div className="ball"><span>{responses}</span><small>de {players.length || 20}</small></div><div><b>Respostas recebidas</b><span>{players.length ? `${Math.max(0, players.length - responses)} participantes faltando` : "Carregando…"}</span></div></div>
+    </section>
+    {view === "votar" ? <section className="content two-col">
+      <aside className="instruction-card"><span className="step">COMO FUNCIONA</span><h2>Uma pessoa por código.</h2><ol><li><b>Digite seu código</b><span>Ele identifica você; não existe lista de nomes.</span></li><li><b>Avalie por fundamento</b><span>Use 1 a 5 ou deixe em branco quem não conhece.</span></li><li><b>Revise e envie</b><span>Depois do envio, somente o admin pode liberar uma correção.</span></li></ol></aside>
+      <div className="panel">
+        {!voter ? <><div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div></div><p>Use os 6 números recebidos pelo WhatsApp. O código não fica salvo neste celular.</p><label className="select-label pin-label">Código individual<input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} /></label><button className="primary full" disabled={saving} onClick={identifyVoter}>{saving ? "Validando…" : "Continuar"}</button></> : <>
+          <div className="panel-head"><div><span className="step">AVALIAÇÃO</span><h2>Fundamentos do jogador</h2></div><span className="draft-count">{ratedCount}/19 avaliados</span></div>
+          <div className="voter-badge"><b>Você está avaliando como:</b> {voter}</div>
+          <div className="player-progress"><div><i style={{ width: `${((index + 1) / Math.max(1, candidates.length)) * 100}%` }} /></div><span>Jogador {index + 1} de {candidates.length}</span></div>
+          <div className="focus-player"><span>{current?.slice(0, 1)}</span><div><small>JOGADOR SENDO AVALIADO</small><h3>{current}</h3></div></div>
+          <div className="rating-guide"><b>1</b> iniciante <span>→</span><b>3</b> intermediário <span>→</span><b>5</b> avançado</div>
+          <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
+          <button className="unknown" type="button" onClick={skipCurrent}>Não conheço bem este jogador — deixar em branco</button>
+          <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={() => setIndex((value) => value - 1)}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={() => setIndex((value) => value + 1)}>Próximo →</button> : <button className="primary" disabled={saving} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
+          <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. É preciso avaliar pelo menos 10 pessoas.</p>
+        </>}
+        {notice && <p className={notice.includes("registrada") ? "notice success" : "notice"}>{notice}</p>}
+      </div>
+    </section> : <section className="content"><div className="section-title"><div><span className="step">RESULTADOS</span><h2>Ranking do grupo</h2><p>As médias ignoram campos em branco. As notas individuais nunca aparecem aqui.</p></div><button className="primary" onClick={drawPairs}>{pairs.length ? "Refazer duplas" : "Sortear duplas"}</button></div>{notice && <p className="notice">{notice}</p>}<div className="results-layout"><div className="ranking"><div className="table-head"><span>#</span><span>Jogador</span><span>Notas</span><span>Média</span><span>Pote</span></div>{results.map((player, position) => <div className="rank-row" key={player.name}><span className="position">{position + 1}</span><span className="rank-name"><i>{player.name.slice(0, 1)}</i>{player.name}</span><span>{player.votes}</span><b>{player.average === null ? "—" : player.average.toFixed(2).replace(".", ",")}</b><span className={`pot pot-${player.pot || "—"}`}>{player.pot || "—"}</span></div>)}</div><aside className="pots"><h3>Potes automáticos</h3>{["A", "B", "C", "D"].map((pot) => <div className={`pot-card pot-card-${pot}`} key={pot}><b>Pote {pot}</b><span>{results.filter((player) => player.pot === pot).map((player) => player.name).join(" · ") || "Aguardando notas"}</span></div>)}</aside></div>{pairs.length > 0 && <div className="draw"><div className="draw-title"><span className="step">SORTEIO EQUILIBRADO</span><h2>Duplas formadas</h2></div><div className="pairs-grid">{pairs.map((pair, position) => <div className="pair-card" key={`${pair.a.name}-${pair.b.name}`}><span>Dupla {String(position + 1).padStart(2, "0")}</span><div><b>{pair.a.name}</b><em>{pair.a.average?.toFixed(2)}</em></div><i>+</i><div><b>{pair.b.name}</b><em>{pair.b.average?.toFixed(2)}</em></div><small>Média: {(((pair.a.average || 0) + (pair.b.average || 0)) / 2).toFixed(2)}</small></div>)}</div></div>}</section>}
+  </main>;
 }
