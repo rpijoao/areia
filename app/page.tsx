@@ -45,7 +45,7 @@ export default function Home() {
             <h1>Voltamos <em>em breve.</em></h1>
             <p>Estamos ajustando as avaliações para deixar o próximo sorteio mais justo, seguro e equilibrado para todo mundo.</p>
             <div className="paused-status"><span>●</span> Avaliações temporariamente fechadas</div>
-            <a className="primary paused-admin-cta" href="/admin">Acessar painel administrativo <span>→</span></a>
+            <a className="primary paused-admin-cta" href="/admin"> <span>→</span></a>
           </div>
           <div className="paused-card" aria-hidden="true">
             <div className="paused-card-top"><span>AREIA EQUILIBRADA</span><i>●</i></div>
