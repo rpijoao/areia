@@ -21,7 +21,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Código inválido. Confira os 6 números recebidos." }, { status: 401 });
     }
 
-    return NextResponse.json({ voter });
+    const ballot = await sql`SELECT 1 FROM ballots WHERE voter_name = ${voter} LIMIT 1`;
+    return NextResponse.json({ voter, submitted: Boolean(ballot.length) });
   } catch {
     return NextResponse.json({ error: "Não foi possível validar o código agora." }, { status: 500 });
   }

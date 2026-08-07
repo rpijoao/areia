@@ -22,6 +22,7 @@ export default function Home() {
   const [view, setView] = useState<"votar" | "resultados">("votar");
   const [pin, setPin] = useState("");
   const [voter, setVoter] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   const [draft, setDraft] = useState<Record<string, SkillScore>>({});
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState("");
@@ -69,6 +70,7 @@ export default function Home() {
       localStorage.setItem("areia:codigo", savedCode);
       localStorage.setItem("areia:votante", name);
       setVoter(name);
+      setSubmitted(Boolean(data.submitted));
       const saved = localStorage.getItem(`areia:rascunho:${name}`);
       try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
       setIndex(0);
@@ -124,6 +126,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || "Não foi possível registrar.");
       localStorage.removeItem(`areia:rascunho:${voter}`);
       setNotice("Avaliação registrada. Obrigado!");
+      setSubmitted(true);
       await loadState();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível salvar a avaliação.");
@@ -158,6 +161,8 @@ export default function Home() {
     setPairs([]);
     setNotice("");
   }
+
+  if (voter && submitted && view === "votar") return <main id="top"><header className="topbar"><a className="brand" href="#top"><span className="brand-mark">AE</span><span>Areia <b>Equilibrada</b></span></a><nav aria-label="Navegação principal"><button className="active">Avaliar</button><button onClick={() => setView("resultados")}>Resultados</button><a className="admin-link" href="/admin">Admin</a></nav></header><section className="content assessment-content"><div className="panel completed-panel"><span className="step">AVALIAÇÃO CONCLUÍDA</span><h2>Resposta já enviada</h2><p>Sua avaliação está registrada e bloqueada. Se precisar corrigir algo, peça ao administrador para liberar sua resposta.</p><button className="primary" onClick={() => setView("resultados")}>Ver resultados</button></div></section></main>;
 
   return <main id="top">
     <header className="topbar">
