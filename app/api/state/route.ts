@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
 import { isBlocked, recordFailure } from "../../../lib/security";
 
-const SKILLS = new Set(["levantamento", "passe", "ataque", "saque"]);
+const SKILL_KEYS = ["levantamento", "passe", "ataque", "saque"] as const;
+const SKILLS = new Set<string>(SKILL_KEYS);
 const MIN_PLAYERS_RATED = 10;
 
 type Scores = Record<string, number>;
@@ -18,27 +19,36 @@ function median(values: number[]) {
 // como ela não diferencia jogadores, cada nota vale o centro neutro (3).
 function normalizedScores(ballot: Ballot) {
   const values = Object.values(ballot).flatMap((scores) => Object.values(scores));
-  if (!values.length) return [] as { player: string; value: number }[];
+  if (!values.length) return [] as { player: string; skill: string; value: number }[];
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   const deviation = Math.sqrt(variance);
-  return Object.entries(ballot).flatMap(([player, scores]) => Object.values(scores).map((value) => ({
-    player,
+  return Object.entries(ballot).flatMap(([player, scores]) => Object.entries(scores).map(([skill, value]) => ({
+    player, skill,
     value: deviation < 0.25 ? 3 : Math.max(1, Math.min(5, 3 + (value - mean) / deviation)),
   })));
 }
 
 function buildResults(players: string[], ballots: { ratings: Ballot }[]) {
   const received = new Map(players.map((player) => [player, [] as number[]]));
+  const receivedBySkill = new Map(players.map((player) => [player, new Map(SKILL_KEYS.map((skill) => [skill, [] as number[]]))]));
   const coverage = new Map(players.map((player) => [player, 0]));
   for (const row of ballots) {
     const ballot = row.ratings || {};
     for (const player of Object.keys(ballot)) coverage.set(player, (coverage.get(player) ?? 0) + 1);
-    for (const rating of normalizedScores(ballot)) received.get(rating.player)?.push(rating.value);
+    for (const rating of normalizedScores(ballot)) {
+      received.get(rating.player)?.push(rating.value);
+      receivedBySkill.get(rating.player)?.get(rating.skill as typeof SKILL_KEYS[number])?.push(rating.value);
+    }
   }
   const ranked = players.map((name) => {
     const values = received.get(name) ?? [];
-    return { name, average: values.length ? median(values) : null, votes: coverage.get(name) ?? 0 };
+    const skillValues = receivedBySkill.get(name);
+    const skills = Object.fromEntries(SKILL_KEYS.map((skill) => {
+      const valuesForSkill = skillValues?.get(skill) ?? [];
+      return [skill, valuesForSkill.length ? median(valuesForSkill) : null];
+    }));
+    return { name, average: values.length ? median(values) : null, votes: coverage.get(name) ?? 0, skills };
   }).sort((a, b) => (b.average ?? -1) - (a.average ?? -1) || a.name.localeCompare(b.name, "pt-BR"));
   return ranked.map((player, index) => ({ ...player, pot: player.average === null ? null : ["A", "B", "C", "D"][Math.min(3, Math.floor(index / 5))] }));
 }
