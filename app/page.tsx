@@ -65,6 +65,7 @@ export default function Home() {
       try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
       setIndex(0);
       setNotice("");
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
     } finally { setSaving(false); }
