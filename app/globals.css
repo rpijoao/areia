@@ -20,6 +20,7 @@
 /* Entrada por código e navegação pública reconstruídas. */
 .select-label input{padding:14px 16px;border:1px solid #cdd8d3;border-radius:11px;background:#fff;color:var(--ink);outline:none}.select-label input:focus{border-color:var(--orange);box-shadow:0 0 0 3px #ed6a3518}.pin-label{max-width:360px;margin-top:18px}.pin-label input{font-size:20px;letter-spacing:.22em;font-weight:800}.topbar nav{align-items:center}.topbar nav .admin-link{padding:10px 13px;font-size:12px}
 .assessment-content{max-width:780px;padding-top:34px}.assessment-content .panel{box-shadow:0 20px 45px #17342d12}
+main:has(.draw-actions) .results-layout .table-head,main:has(.draw-actions) .results-layout .rank-row{grid-template-columns:34px minmax(150px,1fr) 62px 40px}main:has(.draw-actions) .results-layout .table-head span:nth-child(3),main:has(.draw-actions) .results-layout .rank-row>span:nth-of-type(3){display:none}main:has(.draw-actions) .results-layout .rank-row b{text-align:center}@media(max-width:760px){main:has(.draw-actions) .results-layout .table-head,main:has(.draw-actions) .results-layout .rank-row{grid-template-columns:28px minmax(145px,1fr) 58px 34px}}
 .assessment-title{margin:6px 0 3px!important;font-size:clamp(30px,8vw,40px)!important}.assessment-meta{margin:0;color:var(--muted);font-size:13px}.compact-progress{margin:15px 0 12px!important}.assessment-content .rating-guide{margin-top:0}
 
 .rating-guide{padding:13px 16px;gap:11px;font-size:14px;font-weight:700}.rating-guide b{font-size:17px}
