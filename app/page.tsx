@@ -24,6 +24,7 @@ export default function Home() {
   const [voter, setVoter] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [draft, setDraft] = useState<Record<string, SkillScore>>({});
+  const [skipped, setSkipped] = useState<Record<string, true>>({});
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -57,6 +58,7 @@ export default function Home() {
   const candidates = useMemo(() => players.filter((name) => name !== voter), [players, voter]);
   const current = candidates[index];
   const ratedCount = Object.values(draft).filter((scores) => Object.keys(scores).length > 0).length;
+  const currentReady = Boolean(current && (skipped[current] || SKILLS.every((skill) => typeof draft[current]?.[skill.key] === "number")));
 
   async function identifyVoter(savedCode = pin, restoring = false) {
     if (savedCode.length !== 6) return setNotice("Digite o código individual de 6 números.");
@@ -88,6 +90,7 @@ export default function Home() {
   function setScore(skill: Skill, value?: number) {
     if (!current) return;
     const player = current;
+    setSkipped((old) => { const next = { ...old }; delete next[player]; return next; });
     setDraft((old) => {
       const scores = { ...(old[player] || {}) };
       if (value) scores[skill] = value; else delete scores[skill];
@@ -99,6 +102,7 @@ export default function Home() {
 
   function skipCurrent() {
     if (!current) return;
+    setSkipped((old) => ({ ...old, [current]: true }));
     setDraft((old) => { const next = { ...old }; delete next[current]; return next; });
     if (index < candidates.length - 1) {
       setIndex((value) => value + 1);
@@ -186,7 +190,7 @@ export default function Home() {
           <div className="rating-guide"><span className="guide-level"><b>1</b> Iniciante</span><i className="guide-arrow">→</i><span className="guide-level"><b>3</b> Intermediário</span><i className="guide-arrow">→</i><span className="guide-level"><b>5</b> Avançado</span></div>
           <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
           <button className="unknown" type="button" onClick={skipCurrent}>Não conheço bem este jogador — deixar em branco</button>
-          <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={previousPlayer}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={nextPlayer}>Próximo →</button> : <button className="primary" disabled={saving} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
+          <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={previousPlayer}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" disabled={!currentReady} onClick={nextPlayer}>Próximo →</button> : <button className="primary" disabled={saving || !currentReady} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
           <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. Para cada pessoa avaliada, dê nota nos 4 fundamentos. É preciso avaliar pelo menos 10 pessoas.</p>
         </>}
         {notice && <p className={notice.includes("registrada") ? "notice success" : "notice"}>{notice}</p>}
