@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSql } from "../../../lib/db";
-import { limited } from "../../../lib/security";
+import { isBlocked, recordFailure } from "../../../lib/security";
 
 const SKILLS = new Set(["levantamento", "passe", "ataque", "saque"]);
 const MIN_PLAYERS_RATED = 10;
@@ -60,7 +60,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    if (await limited(request, "vote-submit", 5)) {
+    if (await isBlocked(request, "vote-submit", 5)) {
       return NextResponse.json({ error: "Muitas tentativas de envio. Aguarde 15 minutos." }, { status: 429 });
     }
     const body = await request.json();
@@ -72,7 +72,10 @@ export async function POST(request: Request) {
     const players: string[] = settings[0]?.players ?? [];
     const access = await sql`SELECT player_name FROM player_access WHERE pin = ${pin} LIMIT 1`;
     const voter = access[0]?.player_name;
-    if (!voter || !players.includes(voter)) return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
+    if (!voter || !players.includes(voter)) {
+      await recordFailure(request, "vote-submit");
+      return NextResponse.json({ error: "Código individual inválido." }, { status: 403 });
+    }
     const previous = await sql`SELECT 1 FROM ballots WHERE voter_name = ${voter}`;
     if (previous.length) return NextResponse.json({ error: "Sua resposta já foi enviada e está bloqueada. Peça ao administrador para liberar uma correção." }, { status: 409 });
 

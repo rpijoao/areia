@@ -8,19 +8,34 @@ function clientAddress(request: Request) {
     || "unknown";
 }
 
-// A contagem fica no banco, portanto continua valendo mesmo quando o Vercel
-// cria outra instância do site.
-export async function limited(request: Request, scope: string, maximum: number) {
+async function prepareLimits() {
   const sql = getSql();
-  const key = `${scope}:${clientAddress(request)}`;
   await sql`CREATE TABLE IF NOT EXISTS request_limits (key text PRIMARY KEY, attempts integer NOT NULL DEFAULT 0, expires_at timestamptz NOT NULL)`;
-  const rows = await sql`
+  await sql`DELETE FROM request_limits WHERE expires_at < NOW()`;
+  return sql;
+}
+
+function keyFor(request: Request, scope: string) {
+  return `${scope}:${clientAddress(request)}`;
+}
+
+// Apenas falhas contam. Assim, vários jogadores na mesma rede podem entrar
+// normalmente, sem esgotar o limite uns dos outros.
+export async function isBlocked(request: Request, scope: string, maximum: number) {
+  const sql = await prepareLimits();
+  const key = keyFor(request, scope);
+  const rows = await sql`SELECT attempts FROM request_limits WHERE key = ${key} AND expires_at >= NOW()`;
+  return Number(rows[0]?.attempts ?? 0) >= maximum;
+}
+
+export async function recordFailure(request: Request, scope: string) {
+  const sql = await prepareLimits();
+  const key = keyFor(request, scope);
+  await sql`
     INSERT INTO request_limits (key, attempts, expires_at)
     VALUES (${key}, 1, NOW() + (${WINDOW_MINUTES} * INTERVAL '1 minute'))
     ON CONFLICT (key) DO UPDATE SET
-      attempts = CASE WHEN request_limits.expires_at < NOW() THEN 1 ELSE request_limits.attempts + 1 END,
-      expires_at = CASE WHEN request_limits.expires_at < NOW() THEN NOW() + (${WINDOW_MINUTES} * INTERVAL '1 minute') ELSE request_limits.expires_at END
-    RETURNING attempts
+      attempts = request_limits.attempts + 1,
+      expires_at = NOW() + (${WINDOW_MINUTES} * INTERVAL '1 minute')
   `;
-  return Number(rows[0]?.attempts ?? 0) > maximum;
 }
