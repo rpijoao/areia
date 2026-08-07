@@ -85,7 +85,16 @@ export default function Home() {
   function skipCurrent() {
     if (!current) return;
     setDraft((old) => { const next = { ...old }; delete next[current]; return next; });
-    if (index < candidates.length - 1) setIndex((value) => value + 1);
+    if (index < candidates.length - 1) {
+      setIndex((value) => value + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function nextPlayer() {
+    setIndex((value) => Math.min(candidates.length - 1, value + 1));
+    setNotice("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submit() {
@@ -141,12 +150,12 @@ export default function Home() {
         <a className="admin-link" href="/admin">Admin</a>
       </nav>
     </header>
-    <section className="hero">
+    {!voter && <section className="hero">
       <div><span className="eyebrow">VÔLEI DE PRAIA · GRUPO</span><h1>Jogo justo.<br /><em>Times equilibrados.</em></h1><p>Cada pessoa avalia os demais por fundamento. As notas em branco são ignoradas.</p></div>
       <div className="hero-score"><div className="ball"><span>{responses}</span><small>de {players.length || 20}</small></div><div><b>Respostas recebidas</b><span>{players.length ? `${Math.max(0, players.length - responses)} participantes faltando` : "Carregando…"}</span></div></div>
-    </section>
-    {view === "votar" ? <section className="content two-col">
-      <aside className="instruction-card"><span className="step">COMO FUNCIONA</span><h2>Uma pessoa por código.</h2><ol><li><b>Digite seu código</b><span>Ele identifica você; não existe lista de nomes.</span></li><li><b>Avalie por fundamento</b><span>Use 1 a 5 ou deixe em branco quem não conhece.</span></li><li><b>Revise e envie</b><span>Depois do envio, somente o admin pode liberar uma correção.</span></li></ol></aside>
+    </section>}
+    {view === "votar" ? <section className={voter ? "content assessment-content" : "content two-col"}>
+      {!voter && <aside className="instruction-card"><span className="step">COMO FUNCIONA</span><h2>Uma pessoa por código.</h2><ol><li><b>Digite seu código</b><span>Ele identifica você; não existe lista de nomes.</span></li><li><b>Avalie por fundamento</b><span>Use 1 a 5 ou deixe em branco quem não conhece.</span></li><li><b>Revise e envie</b><span>Depois do envio, somente o admin pode liberar uma correção.</span></li></ol></aside>}
       <div className="panel">
         {!voter ? <><div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div></div><p>Use os 6 números recebidos pelo WhatsApp. O código não fica salvo neste celular.</p><label className="select-label pin-label">Código individual<input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} /></label><button className="primary full" disabled={saving} onClick={identifyVoter}>{saving ? "Validando…" : "Continuar"}</button></> : <>
           <div className="panel-head"><div><span className="step">AVALIAÇÃO</span><h2>Fundamentos do jogador</h2></div><span className="draft-count">{ratedCount}/19 avaliados</span></div>
@@ -156,7 +165,7 @@ export default function Home() {
           <div className="rating-guide"><b>1</b> iniciante <span>→</span><b>3</b> intermediário <span>→</span><b>5</b> avançado</div>
           <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
           <button className="unknown" type="button" onClick={skipCurrent}>Não conheço bem este jogador — deixar em branco</button>
-          <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={() => setIndex((value) => value - 1)}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={() => setIndex((value) => value + 1)}>Próximo →</button> : <button className="primary" disabled={saving} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
+          <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={() => { setIndex((value) => value - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={nextPlayer}>Próximo →</button> : <button className="primary" disabled={saving} onClick={submit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
           <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. Para cada pessoa avaliada, dê nota nos 4 fundamentos. É preciso avaliar pelo menos 10 pessoas.</p>
         </>}
         {notice && <p className={notice.includes("registrada") ? "notice success" : "notice"}>{notice}</p>}
