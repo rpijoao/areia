@@ -151,7 +151,7 @@ export default function Home() {
         <a className="admin-link" href="/admin">Admin</a>
       </nav>
     </header>
-    {!voter && <section className="hero">
+    {!voter && view === "votar" && <section className="hero">
       <div><span className="eyebrow">VÔLEI DE PRAIA · GRUPO</span><h1>Jogo justo.<br /><em>Times equilibrados.</em></h1><p>Cada pessoa avalia os demais por fundamento. As notas em branco são ignoradas.</p></div>
       <div className="hero-score"><div className="ball"><span>{responses}</span><small>de {players.length || 20}</small></div><div><b>Respostas recebidas</b><span>{players.length ? `${Math.max(0, players.length - responses)} participantes faltando` : "Carregando…"}</span></div></div>
     </section>}
