@@ -25,6 +25,8 @@ export default function Home() {
   const [submitted, setSubmitted] = useState(false);
   const [draft, setDraft] = useState<Record<string, SkillScore>>({});
   const [skipped, setSkipped] = useState<Record<string, true>>({});
+  const [showMissing, setShowMissing] = useState(false);
+  const [shake, setShake] = useState(false);
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -103,6 +105,7 @@ export default function Home() {
 
   function skipCurrent() {
     if (!current) return;
+    setShowMissing(false);
     setSkipped((old) => ({ ...old, [current]: true }));
     setDraft((old) => { const next = { ...old }; delete next[current]; return next; });
     if (index < candidates.length - 1) {
@@ -113,17 +116,23 @@ export default function Home() {
 
   function nextPlayer() {
     setIndex((value) => Math.min(candidates.length - 1, value + 1));
+    setShowMissing(false);
     setNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function previousPlayer() {
     setIndex((value) => Math.max(0, value - 1));
+    setShowMissing(false);
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }
 
   function warnAboutMissingSkills() {
-    setNotice(`Faltam: ${missingSkills.map((skill) => skill.label).join(", ")}. Preencha todos ou deixe este jogador em branco.`);
+    setShowMissing(true);
+    setNotice("");
+    setShake(false);
+    window.requestAnimationFrame(() => setShake(true));
+    if (navigator.vibrate) navigator.vibrate(90);
   }
 
   function tryNextPlayer() {
@@ -198,12 +207,12 @@ export default function Home() {
     </section>}
     {view === "votar" ? <section className={voter ? "content assessment-content" : "content two-col"}>
       {!voter && <aside className="instruction-card"><span className="step">COMO FUNCIONA</span><h2>Uma pessoa por código.</h2><ol><li><b>Digite seu código</b><span>Ele identifica você; não existe lista de nomes.</span></li><li><b>Avalie por fundamento</b><span>Use 1 a 5 ou deixe em branco quem não conhece.</span></li><li><b>Revise e envie</b><span>Depois do envio, somente o admin pode liberar uma correção.</span></li></ol></aside>}
-      <div className="panel">
+      <div className={shake ? "panel validation-shake" : "panel"}>
         {!voter ? <><div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div></div><p>Use os 6 números recebidos pelo WhatsApp. O código fica salvo neste celular.</p><label className="select-label pin-label">Código individual<input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} /></label><button className="primary full" disabled={saving} onClick={() => void identifyVoter()}>{saving ? "Validando…" : "Continuar"}</button></> : <>
           <div className="panel-head"><div><span className="step">AVALIAÇÃO</span><h2 className="assessment-title">Avaliar {current}</h2><p className="assessment-meta">Você: <b>{voter}</b> · Jogador {index + 1} de {candidates.length}</p></div><span className="draft-count">{ratedCount}/19</span></div>
           <div className="player-progress compact-progress"><div><i style={{ width: `${((index + 1) / Math.max(1, candidates.length)) * 100}%` }} /></div></div>
           <div className="rating-guide"><span className="guide-level"><b>1</b> Iniciante</span><i className="guide-arrow">→</i><span className="guide-level"><b>3</b> Intermediário</span><i className="guide-arrow">→</i><span className="guide-level"><b>5</b> Avançado</span></div>
-          <div className="skill-list">{SKILLS.map((skill) => <div className="skill-row" key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
+          <div className="skill-list">{SKILLS.map((skill) => <div className={showMissing && current && !skipped[current] && typeof draft[current]?.[skill.key] !== "number" ? "skill-row missing-skill" : "skill-row"} key={skill.key}><div><b>{skill.label}</b><small>{skill.help}</small></div><div className="score-buttons">{[1, 2, 3, 4, 5].map((score) => <button type="button" key={score} className={current && draft[current]?.[skill.key] === score ? "selected" : ""} onClick={() => setScore(skill.key, score)}>{score}</button>)}<button type="button" className="clear" onClick={() => setScore(skill.key)}>×</button></div></div>)}</div>
           <button className="unknown" type="button" onClick={skipCurrent}>Não conheço bem este jogador — deixar em branco</button>
           <div className="wizard-actions"><button className="secondary" disabled={index === 0 || saving} onClick={previousPlayer}>← Voltar</button>{index < candidates.length - 1 ? <button className="primary" onClick={tryNextPlayer}>Próximo →</button> : <button className="primary" disabled={saving} onClick={trySubmit}>{saving ? "Salvando…" : "Concluir avaliação"}</button>}</div>
           <p className="privacy">Você pode voltar e corrigir qualquer jogador antes de enviar. Para cada pessoa avaliada, dê nota nos 4 fundamentos. É preciso avaliar pelo menos 10 pessoas.</p>
