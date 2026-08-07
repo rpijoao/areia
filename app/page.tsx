@@ -9,10 +9,10 @@ type Pair = { a: PlayerResult; b: PlayerResult };
 type Team = { players: PlayerResult[]; total: number; capacity: number };
 
 const SKILLS: { key: Skill; label: string; help: string }[] = [
-  { key: "levantamento", label: "Levantamento", help: "Passar a bola para o parceiro atacar." },
-  { key: "passe", label: "Passe", help: "Receber o saque ou ataque e controlar a bola." },
-  { key: "ataque", label: "Ataque", help: "Bater ou colocar a bola na quadra adversária para fazer o ponto." },
-  { key: "saque", label: "Saque", help: "Colocar a bola em jogo e dificultar a recepção do adversário." },
+  { key: "levantamento", label: "Levantamento", help: "Levantar a bola para o ataque do parceiro." },
+  { key: "passe", label: "Passe", help: "Receber o saque do adversário e deixar a bola pronta para o levantamento." },
+  { key: "ataque", label: "Ataque", help: "Atacar o adversário, seja por cortada, pingo ou batida." },
+  { key: "saque", label: "Saque", help: "Sacar a bola com precisão e consistência." },
 ];
 
 export default function Home() {
