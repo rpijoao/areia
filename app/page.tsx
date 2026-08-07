@@ -44,6 +44,12 @@ export default function Home() {
 
   useEffect(() => { void loadState(); }, []);
   useEffect(() => {
+    const savedPin = localStorage.getItem("areia:codigo");
+    if (!savedPin) return;
+    setPin(savedPin);
+    void identifyVoter(savedPin, true);
+  }, []);
+  useEffect(() => {
     if (voter) localStorage.setItem(`areia:rascunho:${voter}`, JSON.stringify(draft));
   }, [voter, draft]);
 
@@ -51,22 +57,28 @@ export default function Home() {
   const current = candidates[index];
   const ratedCount = Object.values(draft).filter((scores) => Object.keys(scores).length > 0).length;
 
-  async function identifyVoter() {
-    if (pin.length !== 6) return setNotice("Digite o código individual de 6 números.");
+  async function identifyVoter(savedCode = pin, restoring = false) {
+    if (savedCode.length !== 6) return setNotice("Digite o código individual de 6 números.");
     setSaving(true);
     try {
-      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
+      const response = await fetch("/api/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: savedCode }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Código inválido.");
       const name = String(data.voter || "");
       if (!name) throw new Error("Não foi possível identificar o jogador.");
+      localStorage.setItem("areia:codigo", savedCode);
+      localStorage.setItem("areia:votante", name);
       setVoter(name);
       const saved = localStorage.getItem(`areia:rascunho:${name}`);
       try { setDraft(saved ? JSON.parse(saved) : {}); } catch { setDraft({}); }
       setIndex(0);
       setNotice("");
-      window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+      if (!restoring) window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
     } catch (error) {
+      if (error instanceof Error && error.message.includes("Código inválido")) {
+        localStorage.removeItem("areia:codigo");
+        localStorage.removeItem("areia:votante");
+      }
       setNotice(error instanceof Error ? error.message : "Não foi possível validar o código.");
     } finally { setSaving(false); }
   }
@@ -163,7 +175,7 @@ export default function Home() {
     {view === "votar" ? <section className={voter ? "content assessment-content" : "content two-col"}>
       {!voter && <aside className="instruction-card"><span className="step">COMO FUNCIONA</span><h2>Uma pessoa por código.</h2><ol><li><b>Digite seu código</b><span>Ele identifica você; não existe lista de nomes.</span></li><li><b>Avalie por fundamento</b><span>Use 1 a 5 ou deixe em branco quem não conhece.</span></li><li><b>Revise e envie</b><span>Depois do envio, somente o admin pode liberar uma correção.</span></li></ol></aside>}
       <div className="panel">
-        {!voter ? <><div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div></div><p>Use os 6 números recebidos pelo WhatsApp. O código não fica salvo neste celular.</p><label className="select-label pin-label">Código individual<input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} /></label><button className="primary full" disabled={saving} onClick={identifyVoter}>{saving ? "Validando…" : "Continuar"}</button></> : <>
+        {!voter ? <><div className="panel-head"><div><span className="step">PASSO 1</span><h2>Digite seu código</h2></div></div><p>Use os 6 números recebidos pelo WhatsApp. O código fica salvo neste celular.</p><label className="select-label pin-label">Código individual<input value={pin} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} /></label><button className="primary full" disabled={saving} onClick={() => void identifyVoter()}>{saving ? "Validando…" : "Continuar"}</button></> : <>
           <div className="panel-head"><div><span className="step">AVALIAÇÃO</span><h2 className="assessment-title">Avaliar {current}</h2><p className="assessment-meta">Você: <b>{voter}</b> · Jogador {index + 1} de {candidates.length}</p></div><span className="draft-count">{ratedCount}/19</span></div>
           <div className="player-progress compact-progress"><div><i style={{ width: `${((index + 1) / Math.max(1, candidates.length)) * 100}%` }} /></div></div>
           <div className="rating-guide"><span className="guide-level"><b>1</b> Iniciante</span><i className="guide-arrow">→</i><span className="guide-level"><b>3</b> Intermediário</span><i className="guide-arrow">→</i><span className="guide-level"><b>5</b> Avançado</span></div>
